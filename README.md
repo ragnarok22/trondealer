@@ -16,6 +16,12 @@ For local development:
 pip install -e ".[dev]"
 ```
 
+This repository also supports `uv`, which is useful when your system Python is externally managed:
+
+```bash
+uv sync --extra dev
+```
+
 ## Configuration
 
 Store your API key in an environment variable or secret manager:
@@ -223,11 +229,33 @@ Other known discrepancies:
 
 ## Development
 
+The Makefile runs tools through `uv run --extra dev`, so commands use the project development environment instead of depending on packages installed in your global Python.
+
+```bash
+make help
+make test
+make test:coverage
+make lint
+make format
+make format:check
+```
+
+Equivalent direct commands after installing development dependencies:
+
 ```bash
 pip install -e ".[dev]"
 ruff check .
 ruff format --check .
 pytest
+```
+
+If your Python installation is externally managed and `pip install -e ".[dev]"` is blocked, use:
+
+```bash
+uv sync --extra dev
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
 ```
 
 ## Publishing To PyPI
