@@ -1,5 +1,11 @@
 # TronDealer Python SDK
 
+[![CI](https://github.com/ragnarok22/trondealer/actions/workflows/ci.yml/badge.svg)](https://github.com/ragnarok22/trondealer/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/trondealer.svg)](https://pypi.org/project/trondealer/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/trondealer.svg)](https://pypi.org/project/trondealer/)
+[![License](https://img.shields.io/pypi/l/trondealer.svg)](LICENSE)
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-46aef7.svg)](https://docs.astral.sh/ruff/)
+
 Typed Python SDK for the TronDealer API, built for backend integrations that assign deposit wallets, reconcile balances and transactions, and verify HMAC-signed webhooks.
 
 The SDK follows the official integration guide as the primary source for the payment flow.
