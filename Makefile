@@ -1,5 +1,8 @@
 .PHONY: help test test\:coverage lint format format\:check
 
+UV ?= uv
+UV_RUN = $(UV) run --extra dev
+
 help:
 	@printf "Available commands:\n"
 	@printf "  make help             Show this help message\n"
@@ -10,16 +13,16 @@ help:
 	@printf "  make format:check     Check code formatting\n"
 
 test:
-	python -m pytest
+	$(UV_RUN) pytest
 
 test\:coverage:
-	python -m pytest --cov=trondealer --cov-report=term-missing
+	$(UV_RUN) pytest --cov=trondealer --cov-report=term-missing
 
 lint:
-	python -m ruff check .
+	$(UV_RUN) ruff check .
 
 format:
-	python -m ruff format .
+	$(UV_RUN) ruff format .
 
 format\:check:
-	python -m ruff format --check .
+	$(UV_RUN) ruff format --check .
