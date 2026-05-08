@@ -15,6 +15,7 @@ from ._http import (
     build_headers,
     build_url,
     parse_json_response,
+    validate_response_model,
 )
 from .exceptions import (
     TronDealerAuthenticationError,
@@ -101,7 +102,7 @@ class TronDealerClient:
             auth_required=False,
             retry=False,
         )
-        return ClientRegistrationResponse.model_validate(data)
+        return validate_response_model(ClientRegistrationResponse, data)
 
     def assign_wallet(self, label: str) -> AssignedWallet:
         """Assign or retrieve an EVM wallet for a user-side idempotency label."""
@@ -113,7 +114,7 @@ class TronDealerClient:
             auth_required=True,
             retry=True,
         )
-        return AssignedWalletResponse.model_validate(data).wallet
+        return validate_response_model(AssignedWalletResponse, data).wallet
 
     def get_wallet_balance(self, address: str) -> WalletBalance:
         """Get documented balance data for an assigned EVM wallet."""
@@ -125,7 +126,7 @@ class TronDealerClient:
             auth_required=True,
             retry=True,
         )
-        return WalletBalance.model_validate(data)
+        return validate_response_model(WalletBalance, data)
 
     def list_wallet_transactions(
         self,
@@ -152,7 +153,7 @@ class TronDealerClient:
             auth_required=True,
             retry=True,
         )
-        return TransactionListResponse.model_validate(data)
+        return validate_response_model(TransactionListResponse, data)
 
     def _request(
         self,

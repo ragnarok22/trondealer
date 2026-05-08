@@ -34,6 +34,8 @@ def test_context_manager_closes_owned_client() -> None:
     with client as entered:
         assert entered is client
 
+    assert client._client.is_closed
+
 
 def test_close_does_not_close_injected_client() -> None:
     http_client = CloseTrackingClient()
@@ -257,6 +259,20 @@ def test_non_object_json_response_raises_api_error(httpx_mock) -> None:
         TronDealerClient(api_key="td_secret").get_wallet_balance("0xabc")
 
     assert exc_info.value.response_body == []
+
+
+def test_malformed_success_response_raises_api_error(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/wallets/assign",
+        status_code=200,
+        json={"success": True},
+    )
+
+    with pytest.raises(TronDealerAPIError) as exc_info:
+        TronDealerClient(api_key="td_secret").assign_wallet("order-123")
+
+    assert exc_info.value.response_body == {"success": True}
 
 
 def test_retries_transient_http_errors(httpx_mock, monkeypatch) -> None:

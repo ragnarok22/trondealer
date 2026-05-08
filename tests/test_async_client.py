@@ -7,6 +7,7 @@ from trondealer import AsyncTronDealerClient
 from trondealer.exceptions import (
     TronDealerAPIError,
     TronDealerAuthenticationError,
+    TronDealerNetworkError,
     TronDealerRateLimitError,
     TronDealerValidationError,
 )
@@ -33,6 +34,8 @@ async def test_async_context_manager_closes_owned_client() -> None:
 
     async with client as entered:
         assert entered is client
+
+    assert client._client.is_closed
 
 
 @pytest.mark.anyio
@@ -129,6 +132,22 @@ async def test_async_maps_validation_error(httpx_mock) -> None:
     async with AsyncTronDealerClient(api_key="td_secret") as client:
         with pytest.raises(TronDealerValidationError):
             await client.get_wallet_balance("")
+
+
+@pytest.mark.anyio
+async def test_async_malformed_success_response_raises_api_error(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/wallets/assign",
+        status_code=200,
+        json={"success": True},
+    )
+
+    async with AsyncTronDealerClient(api_key="td_secret") as client:
+        with pytest.raises(TronDealerAPIError) as exc_info:
+            await client.assign_wallet("order-123")
+
+    assert exc_info.value.response_body == {"success": True}
 
 
 @pytest.mark.anyio
@@ -259,9 +278,8 @@ async def test_async_retries_network_errors_and_preserves_cause(monkeypatch) -> 
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         client = AsyncTronDealerClient(api_key="td_secret", max_retries=1, http_client=http_client)
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(TronDealerNetworkError) as exc_info:
             await client.get_wallet_balance("0xabc")
 
-    assert exc_info.value.__class__.__name__ == "TronDealerNetworkError"
     assert isinstance(exc_info.value.__cause__, httpx.ConnectError)
     assert sleeps == [0.5]

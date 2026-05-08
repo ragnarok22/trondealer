@@ -61,6 +61,18 @@ def test_parse_webhook_event_transaction() -> None:
     assert event.data.tx_hash == "0xabc"
 
 
+def test_parse_webhook_event_transaction_indexes() -> None:
+    event = parse_webhook_event(
+        b'{"event":"transaction.confirmed","data":{"tx_hash":"0xabc","log_index":7,'
+        b'"event_index":3,"instruction_index":2}}'
+    )
+
+    assert isinstance(event.data, WebhookTransactionData)
+    assert event.data.log_index == 7
+    assert event.data.event_index == 3
+    assert event.data.instruction_index == 2
+
+
 def test_parse_webhook_event_swept() -> None:
     event = parse_webhook_event(
         b'{"event":"transaction.swept","data":{"sweep_tx_hash":"0xdef",'

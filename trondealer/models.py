@@ -119,6 +119,9 @@ class TransactionListResponse(SDKModel):
 
 class WebhookTransactionData(SDKModel):
     tx_hash: str | None = None
+    log_index: int | None = None
+    event_index: int | None = None
+    instruction_index: int | None = None
     block_number: int | None = None
     from_address: str | None = None
     to_address: str | None = None
