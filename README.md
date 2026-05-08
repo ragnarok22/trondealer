@@ -271,7 +271,9 @@ Do not publish until endpoint behavior has been verified against the live API or
 Example publishing flow:
 
 ```bash
-python -m build
-twine check dist/*
-twine upload dist/*
+uv sync --extra dev
+uv build
+uv run twine check dist/*
 ```
+
+Actual releases are published by `.github/workflows/publish.yml` through PyPI trusted publishing when a tag matching `v*.*.*` is pushed.

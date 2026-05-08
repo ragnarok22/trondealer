@@ -27,7 +27,7 @@ def verify_webhook_signature(raw_body: bytes, signature: str, secret: str) -> bo
     constant-time comparison.
     """
 
-    if not raw_body or not signature or not secret:
+    if not signature or not secret:
         return False
 
     expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()

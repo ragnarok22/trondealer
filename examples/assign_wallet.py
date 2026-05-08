@@ -6,7 +6,7 @@ import os
 
 from trondealer import TronDealerClient
 
-client = TronDealerClient(api_key=os.environ["TRONDEALER_API_KEY"])
-wallet = client.assign_wallet(label="order-A-1024")
+with TronDealerClient(api_key=os.environ["TRONDEALER_API_KEY"]) as client:
+    wallet = client.assign_wallet(label="order-A-1024")
 
 print(wallet.address)

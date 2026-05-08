@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import httpx
 import pytest
 
 from trondealer import TronDealerClient
 from trondealer.exceptions import (
+    TronDealerAPIError,
     TronDealerAuthenticationError,
+    TronDealerNetworkError,
     TronDealerRateLimitError,
     TronDealerValidationError,
 )
@@ -160,3 +163,69 @@ def test_maps_rate_limit_error(httpx_mock) -> None:
 
     with pytest.raises(TronDealerRateLimitError):
         TronDealerClient().register_client_public(name="My Shop")
+
+
+def test_invalid_json_response_raises_api_error(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/wallets/balance",
+        status_code=200,
+        content=b"not-json",
+        headers={"x-request-id": "req_json"},
+    )
+
+    with pytest.raises(TronDealerAPIError) as exc_info:
+        TronDealerClient(api_key="td_secret").get_wallet_balance("0xabc")
+
+    assert exc_info.value.status_code == 200
+    assert exc_info.value.response_body == "not-json"
+    assert exc_info.value.request_id == "req_json"
+
+
+def test_non_object_json_response_raises_api_error(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/wallets/balance",
+        status_code=200,
+        json=[],
+    )
+
+    with pytest.raises(TronDealerAPIError) as exc_info:
+        TronDealerClient(api_key="td_secret").get_wallet_balance("0xabc")
+
+    assert exc_info.value.response_body == []
+
+
+def test_retries_transient_http_errors(httpx_mock, monkeypatch) -> None:
+    sleeps = []
+    httpx_mock.add_response(method="POST", url=f"{BASE_URL}/wallets/balance", status_code=503)
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/wallets/balance",
+        json={"success": True, "balances": {}},
+    )
+    monkeypatch.setattr("trondealer.client.time.sleep", sleeps.append)
+
+    balance = TronDealerClient(api_key="td_secret").get_wallet_balance("0xabc")
+
+    assert balance.success is True
+    assert len(httpx_mock.get_requests()) == 2
+    assert sleeps == [0.5]
+
+
+def test_retries_network_errors_and_preserves_cause(monkeypatch) -> None:
+    request = httpx.Request("POST", f"{BASE_URL}/wallets/balance")
+    transport = httpx.MockTransport(
+        lambda _request: (_ for _ in ()).throw(httpx.ConnectError("boom", request=request))
+    )
+    client = httpx.Client(transport=transport)
+    sleeps = []
+    monkeypatch.setattr("trondealer.client.time.sleep", sleeps.append)
+
+    with pytest.raises(TronDealerNetworkError) as exc_info:
+        TronDealerClient(api_key="td_secret", max_retries=1, http_client=client).get_wallet_balance(
+            "0xabc"
+        )
+
+    assert isinstance(exc_info.value.__cause__, httpx.ConnectError)
+    assert sleeps == [0.5]

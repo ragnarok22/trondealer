@@ -30,6 +30,13 @@ def test_verify_webhook_signature_rejects_invalid_signature() -> None:
     assert not verify_webhook_signature(b"{}", "bad", "secret")
 
 
+def test_verify_webhook_signature_accepts_signed_empty_body() -> None:
+    secret = "webhook-secret"
+    signature = hmac.new(secret.encode(), b"", hashlib.sha256).hexdigest()
+
+    assert verify_webhook_signature(b"", signature, secret)
+
+
 def test_parse_webhook_event_transaction() -> None:
     event = parse_webhook_event(
         b'{"event":"transaction.confirmed","timestamp":"2026-03-30T14:25:30.000Z",'

@@ -7,14 +7,18 @@ from typing import Any
 
 import httpx
 
-from .client import DEFAULT_BASE_URL, DEFAULT_REGISTRATION_ENDPOINT, TRANSIENT_STATUS_CODES
+from ._http import (
+    DEFAULT_BASE_URL,
+    DEFAULT_REGISTRATION_ENDPOINT,
+    TRANSIENT_STATUS_CODES,
+    api_error,
+    build_headers,
+    build_url,
+    parse_json_response,
+)
 from .exceptions import (
-    TronDealerAPIError,
     TronDealerAuthenticationError,
     TronDealerNetworkError,
-    TronDealerNotFoundError,
-    TronDealerRateLimitError,
-    TronDealerValidationError,
 )
 from .models import (
     AssignedWallet,
@@ -151,9 +155,7 @@ class AsyncTronDealerClient:
         if auth_required and not self.api_key:
             raise TronDealerAuthenticationError("An api_key is required for this endpoint")
 
-        headers = {"Accept": "application/json", "Content-Type": "application/json"}
-        if auth_required and self.api_key:
-            headers["x-api-key"] = self.api_key
+        headers = build_headers(self.api_key, auth_required=auth_required)
 
         attempts = self.max_retries + 1 if retry else 1
         last_network_error: Exception | None = None
@@ -162,7 +164,7 @@ class AsyncTronDealerClient:
             try:
                 response = await self._client.request(
                     method,
-                    self._url(endpoint),
+                    build_url(self.base_url, endpoint),
                     json=json,
                     headers=headers,
                 )
@@ -178,70 +180,13 @@ class AsyncTronDealerClient:
                 continue
 
             if response.is_error:
-                raise self._api_error(response)
+                raise api_error(response)
 
-            try:
-                payload = response.json()
-            except ValueError as exc:
-                raise TronDealerAPIError(
-                    "TronDealer returned invalid JSON",
-                    status_code=response.status_code,
-                    response_body=response.text,
-                    request_id=self._request_id(response),
-                ) from exc
-
-            if not isinstance(payload, dict):
-                raise TronDealerAPIError(
-                    "TronDealer returned an unexpected JSON payload",
-                    status_code=response.status_code,
-                    response_body=payload,
-                    request_id=self._request_id(response),
-                )
-
-            return payload
+            return parse_json_response(response)
 
         raise TronDealerNetworkError(
             "Network error while calling TronDealer"
         ) from last_network_error
 
-    def _url(self, endpoint: str) -> str:
-        normalized = endpoint if endpoint.startswith("/") else f"/{endpoint}"
-        return f"{self.base_url}{normalized}"
-
     async def _sleep_before_retry(self, attempt: int) -> None:
         await asyncio.sleep(min(0.5 * (2**attempt), 5.0))
-
-    def _api_error(self, response: httpx.Response) -> TronDealerAPIError:
-        body: Any
-        try:
-            body = response.json()
-        except ValueError:
-            body = response.text
-
-        message = self._error_message(body) or f"TronDealer API error: HTTP {response.status_code}"
-        kwargs = {
-            "status_code": response.status_code,
-            "response_body": body,
-            "request_id": self._request_id(response),
-        }
-
-        if response.status_code == 400:
-            return TronDealerValidationError(message, **kwargs)
-        if response.status_code in {401, 403}:
-            return TronDealerAuthenticationError(message, **kwargs)
-        if response.status_code == 404:
-            return TronDealerNotFoundError(message, **kwargs)
-        if response.status_code == 429:
-            return TronDealerRateLimitError(message, **kwargs)
-        return TronDealerAPIError(message, **kwargs)
-
-    @staticmethod
-    def _error_message(body: Any) -> str | None:
-        if isinstance(body, dict):
-            error = body.get("error") or body.get("message")
-            return str(error) if error else None
-        return str(body) if body else None
-
-    @staticmethod
-    def _request_id(response: httpx.Response) -> str | None:
-        return response.headers.get("x-request-id") or response.headers.get("request-id")

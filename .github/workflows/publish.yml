@@ -36,5 +36,8 @@ jobs:
       - name: Build package
         run: uv build
 
+      - name: Check package metadata
+        run: uv run twine check dist/*
+
       - name: Publish package
         uses: pypa/gh-action-pypi-publish@release/v1
