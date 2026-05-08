@@ -263,17 +263,3 @@ uv run pytest
 uv run ruff check .
 uv run ruff format --check .
 ```
-
-## Publishing To PyPI
-
-Do not publish until endpoint behavior has been verified against the live API or with TronDealer maintainers.
-
-Example publishing flow:
-
-```bash
-uv sync --extra dev
-uv build
-uv run twine check dist/*
-```
-
-Actual releases are published by `.github/workflows/publish.yml` through PyPI trusted publishing when a tag matching `v*.*.*` is pushed.
