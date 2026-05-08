@@ -4,7 +4,13 @@ import httpx
 import pytest
 
 from trondealer import AsyncTronDealerClient
-from trondealer.exceptions import TronDealerAuthenticationError, TronDealerValidationError
+from trondealer.exceptions import (
+    TronDealerAPIError,
+    TronDealerAuthenticationError,
+    TronDealerRateLimitError,
+    TronDealerValidationError,
+)
+from trondealer.types import TransactionStatus
 
 BASE_URL = "https://www.trondealer.com/api/v2"
 
@@ -57,6 +63,32 @@ async def test_async_register_client_public_uses_canonical_endpoint_without_api_
     assert request is not None
     assert request.headers.get("x-api-key") is None
     assert response.client.api_key == "td_abc123"
+
+
+@pytest.mark.anyio
+async def test_async_register_client_public_does_not_retry_transient_errors(
+    httpx_mock,
+    monkeypatch,
+) -> None:
+    sleeps = []
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/clients/register-public",
+        status_code=503,
+        json={"error": "temporarily unavailable"},
+    )
+
+    async def fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    monkeypatch.setattr("trondealer.async_client.asyncio.sleep", fake_sleep)
+
+    async with AsyncTronDealerClient(max_retries=5) as client:
+        with pytest.raises(TronDealerAPIError):
+            await client.register_client_public(name="My Shop")
+
+    assert len(httpx_mock.get_requests()) == 1
+    assert sleeps == []
 
 
 @pytest.mark.anyio
@@ -125,6 +157,25 @@ async def test_async_list_wallet_transactions_sends_optional_filters(httpx_mock)
 
 
 @pytest.mark.anyio
+async def test_async_list_wallet_transactions_accepts_status_enum(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/wallets/transactions",
+        json={"success": True, "transactions": []},
+    )
+
+    async with AsyncTronDealerClient(api_key="td_secret") as client:
+        await client.list_wallet_transactions(
+            address="0xabc",
+            status=TransactionStatus.CONFIRMED,
+        )
+
+    request = httpx_mock.get_request()
+    assert request is not None
+    assert request.read() == b'{"address":"0xabc","status":"confirmed"}'
+
+
+@pytest.mark.anyio
 async def test_async_retries_transient_http_errors(monkeypatch) -> None:
     responses = iter(
         [
@@ -154,6 +205,40 @@ async def test_async_retries_transient_http_errors(monkeypatch) -> None:
         balance = await client.get_wallet_balance("0xabc")
 
     assert balance.success is True
+    assert len(requests) == 2
+    assert sleeps == [0.5]
+
+
+@pytest.mark.anyio
+async def test_async_exhausted_transient_retries_raise_mapped_error(monkeypatch) -> None:
+    responses = iter(
+        [
+            httpx.Response(429, request=httpx.Request("POST", f"{BASE_URL}/wallets/balance")),
+            httpx.Response(429, request=httpx.Request("POST", f"{BASE_URL}/wallets/balance")),
+        ]
+    )
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return next(responses)
+
+    sleeps = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
+
+    monkeypatch.setattr("trondealer.async_client.asyncio.sleep", fake_sleep)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = AsyncTronDealerClient(
+            api_key="td_secret",
+            max_retries=1,
+            http_client=http_client,
+        )
+        with pytest.raises(TronDealerRateLimitError):
+            await client.get_wallet_balance("0xabc")
+
     assert len(requests) == 2
     assert sleeps == [0.5]
 

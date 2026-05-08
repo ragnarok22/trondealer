@@ -14,9 +14,9 @@ from .models import WebhookEvent
 
 def _normalize_signature(signature: str) -> str:
     value = signature.strip()
-    if value.startswith("sha256="):
-        return value.removeprefix("sha256=")
-    return value
+    if value.lower().startswith("sha256="):
+        return value.split("=", 1)[1].lower()
+    return value.lower()
 
 
 def verify_webhook_signature(raw_body: bytes, signature: str, secret: str) -> bool:

@@ -11,6 +11,7 @@ from trondealer.exceptions import (
     TronDealerRateLimitError,
     TronDealerValidationError,
 )
+from trondealer.types import TransactionStatus
 
 BASE_URL = "https://www.trondealer.com/api/v2"
 
@@ -75,6 +76,23 @@ def test_register_client_public_uses_canonical_endpoint_without_api_key(httpx_mo
     assert request.headers.get("x-api-key") is None
     assert request.url.path == "/api/v2/clients/register-public"
     assert response.client.api_key == "td_abc123"
+
+
+def test_register_client_public_does_not_retry_transient_errors(httpx_mock, monkeypatch) -> None:
+    sleeps = []
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/clients/register-public",
+        status_code=503,
+        json={"error": "temporarily unavailable"},
+    )
+    monkeypatch.setattr("trondealer.client.time.sleep", sleeps.append)
+
+    with pytest.raises(TronDealerAPIError):
+        TronDealerClient(max_retries=5).register_client_public(name="My Shop")
+
+    assert len(httpx_mock.get_requests()) == 1
+    assert sleeps == []
 
 
 def test_registration_endpoint_can_be_overridden(httpx_mock) -> None:
@@ -164,6 +182,23 @@ def test_list_wallet_transactions_sends_filters(httpx_mock) -> None:
     assert response.transactions[0].tx_hash == "0xabc"
 
 
+def test_list_wallet_transactions_accepts_status_enum(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/wallets/transactions",
+        json={"success": True, "transactions": []},
+    )
+
+    TronDealerClient(api_key="td_secret").list_wallet_transactions(
+        address="0xabc",
+        status=TransactionStatus.CONFIRMED,
+    )
+
+    request = httpx_mock.get_request()
+    assert request is not None
+    assert request.read() == b'{"address":"0xabc","status":"confirmed"}'
+
+
 def test_maps_validation_error(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",
@@ -239,6 +274,31 @@ def test_retries_transient_http_errors(httpx_mock, monkeypatch) -> None:
     assert balance.success is True
     assert len(httpx_mock.get_requests()) == 2
     assert sleeps == [0.5]
+
+
+def test_exhausted_transient_retries_raise_mapped_error(httpx_mock, monkeypatch) -> None:
+    sleeps = []
+    httpx_mock.add_response(method="POST", url=f"{BASE_URL}/wallets/balance", status_code=429)
+    httpx_mock.add_response(method="POST", url=f"{BASE_URL}/wallets/balance", status_code=429)
+    monkeypatch.setattr("trondealer.client.time.sleep", sleeps.append)
+
+    with pytest.raises(TronDealerRateLimitError):
+        TronDealerClient(api_key="td_secret", max_retries=1).get_wallet_balance("0xabc")
+
+    assert len(httpx_mock.get_requests()) == 2
+    assert sleeps == [0.5]
+
+
+def test_negative_max_retries_is_clamped_to_zero(httpx_mock, monkeypatch) -> None:
+    sleeps = []
+    httpx_mock.add_response(method="POST", url=f"{BASE_URL}/wallets/balance", status_code=503)
+    monkeypatch.setattr("trondealer.client.time.sleep", sleeps.append)
+
+    with pytest.raises(TronDealerAPIError):
+        TronDealerClient(api_key="td_secret", max_retries=-10).get_wallet_balance("0xabc")
+
+    assert len(httpx_mock.get_requests()) == 1
+    assert sleeps == []
 
 
 def test_retries_network_errors_and_preserves_cause(monkeypatch) -> None:

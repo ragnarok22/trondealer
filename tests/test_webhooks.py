@@ -26,6 +26,14 @@ def test_verify_webhook_signature_accepts_sha256_prefix() -> None:
     assert verify_webhook_signature(raw_body, f"sha256={digest}", secret)
 
 
+def test_verify_webhook_signature_accepts_uppercase_prefix_digest_and_whitespace() -> None:
+    raw_body = b'{"event":"transaction.confirmed"}'
+    secret = "webhook-secret"
+    digest = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest().upper()
+
+    assert verify_webhook_signature(raw_body, f"  SHA256={digest}  ", secret)
+
+
 def test_verify_webhook_signature_rejects_invalid_signature() -> None:
     assert not verify_webhook_signature(b"{}", "bad", "secret")
 
@@ -66,3 +74,13 @@ def test_parse_webhook_event_swept() -> None:
 def test_parse_webhook_event_rejects_invalid_json() -> None:
     with pytest.raises(TronDealerValidationError):
         parse_webhook_event(b"not json")
+
+
+def test_parse_webhook_event_rejects_invalid_utf8() -> None:
+    with pytest.raises(TronDealerValidationError):
+        parse_webhook_event(b"\xff")
+
+
+def test_parse_webhook_event_rejects_missing_data() -> None:
+    with pytest.raises(TronDealerValidationError):
+        parse_webhook_event(b'{"event":"transaction.confirmed"}')
