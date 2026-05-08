@@ -15,6 +15,34 @@ from trondealer.exceptions import (
 BASE_URL = "https://www.trondealer.com/api/v2"
 
 
+class CloseTrackingClient(httpx.Client):
+    def __init__(self) -> None:
+        super().__init__(
+            transport=httpx.MockTransport(lambda _request: httpx.Response(200, json={}))
+        )
+        self.close_called = False
+
+    def close(self) -> None:
+        self.close_called = True
+        super().close()
+
+
+def test_context_manager_closes_owned_client() -> None:
+    client = TronDealerClient()
+
+    with client as entered:
+        assert entered is client
+
+
+def test_close_does_not_close_injected_client() -> None:
+    http_client = CloseTrackingClient()
+
+    TronDealerClient(http_client=http_client).close()
+
+    assert not http_client.close_called
+    http_client.close()
+
+
 def test_register_client_public_uses_canonical_endpoint_without_api_key(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",

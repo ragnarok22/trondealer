@@ -158,7 +158,6 @@ class AsyncTronDealerClient:
         headers = build_headers(self.api_key, auth_required=auth_required)
 
         attempts = self.max_retries + 1 if retry else 1
-        last_network_error: Exception | None = None
 
         for attempt in range(attempts):
             try:
@@ -169,7 +168,6 @@ class AsyncTronDealerClient:
                     headers=headers,
                 )
             except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as exc:
-                last_network_error = exc
                 if attempt < attempts - 1:
                     await self._sleep_before_retry(attempt)
                     continue
@@ -183,10 +181,6 @@ class AsyncTronDealerClient:
                 raise api_error(response)
 
             return parse_json_response(response)
-
-        raise TronDealerNetworkError(
-            "Network error while calling TronDealer"
-        ) from last_network_error
 
     async def _sleep_before_retry(self, attempt: int) -> None:
         await asyncio.sleep(min(0.5 * (2**attempt), 5.0))

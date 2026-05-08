@@ -30,6 +30,11 @@ def test_verify_webhook_signature_rejects_invalid_signature() -> None:
     assert not verify_webhook_signature(b"{}", "bad", "secret")
 
 
+def test_verify_webhook_signature_rejects_missing_signature_or_secret() -> None:
+    assert not verify_webhook_signature(b"{}", "", "secret")
+    assert not verify_webhook_signature(b"{}", "signature", "")
+
+
 def test_verify_webhook_signature_accepts_signed_empty_body() -> None:
     secret = "webhook-secret"
     signature = hmac.new(secret.encode(), b"", hashlib.sha256).hexdigest()
